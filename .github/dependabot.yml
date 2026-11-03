@@ -1,0 +1,21 @@
+# 14-day cool-off on every ecosystem (PLAN.md §3.2).
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /backend
+    schedule: { interval: weekly }
+    cooldown: { default-days: 14 }
+    groups:
+      python-dev: { dependency-type: development }
+
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule: { interval: weekly }
+    cooldown: { default-days: 14 }
+    groups:
+      npm-dev: { dependency-type: development }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: monthly }
+    cooldown: { default-days: 14 }
