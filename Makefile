@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help install hooks lint lint-backend lint-frontend format test test-backend test-frontend build-frontend precommit
+.PHONY: help env dev down logs install hooks lint lint-backend lint-frontend format test test-backend test-frontend build-frontend precommit
 
 BACKEND  := uv run --directory backend
 FRONTEND := npm --prefix frontend run -s
@@ -7,6 +7,19 @@ PRE_COMMIT := uvx pre-commit@4.7.0
 
 help: ## List targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-16s %s\n", $$1, $$2}'
+
+env: ## Create .env from .env.example if it doesn't exist
+	@test -f .env || (cp .env.example .env && echo "Created .env from .env.example")
+
+dev: env ## Start the full stack (postgres, redis, api, frontend)
+	docker compose up --build --wait
+	@echo "API: http://localhost:8000/health   Web: http://localhost:3000"
+
+down: ## Stop the stack (keeps data volumes)
+	docker compose down
+
+logs: ## Follow logs from all services
+	docker compose logs -f
 
 install: ## Install backend + frontend deps from lockfiles, then git hooks
 	cd backend && uv sync --frozen

@@ -13,7 +13,7 @@ Each item has a recommended default. "Accept all defaults" is a valid answer. De
 | # | Decision | Recommended default | Why it can't wait |
 |---|---|---|---|
 | D1 | ⚠ **Frontend: Next.js 14 → Next.js 16.** Next.js 14 has been unsupported since Oct 2025 (it gets no security fixes, including CVE-2026-23864). The 2-year window for 15.x ends around now. | Next.js **16.4.x** (Active LTS), React 19, TypeScript **6.0.x**, Tailwind **4.3** | Affects M1-12 onwards |
-| D2 | ⚠ **Default model.** `gpt-4o-mini`, the docs' example, is removed from OpenAI's API on **2027-01-14**. `gpt-5-mini`/`gpt-5-nano` are removed on **2026-12-11**. | M1 compares **`claude-haiku-5-5`** and **`gpt-6-luna`**. Both cost $0.10 / $0.50 per 1M tokens. The winner becomes the default, which answers requirements §7 Q3. Local option: **`qwen3:8b`** on Ollama instead of Llama 3.1 8B. **Which API keys do you have?** | Affects M1-04 |
+| D2 | ✅ **Default model — decided 2026-11-02: Gemini free tier, Ollama as backup.** `gpt-4o-mini`, the docs' example, is removed from OpenAI's API on 2027-01-14, and you prefer no paid API. | Chat **`gemini:gemini-3.5-flash-lite`**, judge **`gemini:gemini-3.6-flash`**, embeddings **`gemini-embedding-2` at 1536 d** (all stable, all on the free tier). Backup: **`ollama:qwen3:8b`**. M1-15 compares the two on the eval set. Free-tier caveats are under R4/R6. | Affects M1-04, M1-05 |
 | D3 | ⚠ **The per-bot "temperature" setting (FR-11).** Claude Haiku 5.5 rejects non-default `temperature`. Anthropic's Python SDK ≥ 1.0 removed it. The OpenAI models are reasoning models with an effort setting instead. | Keep `temperature` as an **optional advanced setting** that is only sent to models that support it (Ollama). The UI hides it for other models. Add a per-bot `reasoning_effort` (default `none`/`low` for latency). | Affects the settings schema in M1-03 |
 | D4 | **FR-5 "require login" for students** conflicts with "students are anonymous in v1, no `users` row". | Defer to *Later*. Keep the `require_login` column, always `false`, and don't show it in the UI. | Scope |
 | D5 | ⚠ **Schema additions** (details in §1 B): `refresh_tokens`, `llm_models`, `llm_usage`, `chat_messages.query_embedding`, and an embedding dimension set from config. | Approve all five | Affects M1-03 and M2 |
@@ -33,9 +33,9 @@ Legend: **C** = needs your confirmation · **P** = proposed default that I'll ap
 | # | Issue | Where | Proposed decision | |
 |---|---|---|---|---|
 | A1 | Next.js 14 is unsupported. Next 16 also removes `next lint`, and `next build` no longer lints. | architecture §3, planning-prompt | Next.js 16.4.x. Lint runs through the ESLint CLI in CI (D1). | **C** |
-| A2 | `gpt-4o-mini` is retiring, and so are `gpt-5-mini`/`nano`. | architecture §7, schema `templates.default_model` example | Compare `claude-haiku-5-5` and `gpt-6-luna` in M1 (D2). | **C** |
+| A2 | `gpt-4o-mini` is retiring, and so are `gpt-5-mini`/`nano`. | architecture §7, schema `templates.default_model` example | Use Gemini 3.5 Flash-Lite on the free tier, with Ollama as backup (D2). | ✅ |
 | A3 | `temperature` is gone or rejected on the current cheap models. | FR-11, `bots.settings` | Make it an optional setting gated by model capability, and add `reasoning_effort` (D3). | **C** |
-| A4 | "Llama 3.1 8B local" is now dated. Guides recommend Qwen3 8B for following "answer only from context" instructions. | architecture §7 | Use `qwen3:8b` as the default local model. Any Ollama tag still works. | **C** |
+| A4 | "Llama 3.1 8B local" is now dated. Guides recommend Qwen3 8B for following "answer only from context" instructions. | architecture §7 | Use `qwen3:8b` as the Ollama backup model. Any Ollama tag still works. | ✅ |
 | A5 | "bge-small-en" is ambiguous. The current model is `BAAI/bge-small-en-v1.5` (384 dims). | architecture §3, schema §3.6 | Use `bge-small-en-v1.5` through **fastembed** (ONNX, no PyTorch). | **P** |
 | A6 | Python 3.12 is now security-only. Celery 5.6 officially supports up to 3.13, and 3.14 support is "initial". | planning-prompt | **Keep 3.12.** Every chosen library supports it. Re-check before M5. | **P** |
 | A7 | Anthropic's Python SDK moved from `httpx` to `httpx2`, because the old `httpx` is unmaintained (last release Dec 2024). | — | Use `httpx2` wherever we pass our own HTTP clients. Check which client FastAPI's TestClient uses at M1-01. | **P** |
@@ -45,7 +45,7 @@ Legend: **C** = needs your confirmation · **P** = proposed default that I'll ap
 | # | Issue | Proposed decision | |
 |---|---|---|---|
 | B1 | **FR-5** optional student login, but students have no accounts. | Defer to Later (D4). | **C** |
-| B2 | **Embedding dimension is fixed** at `VECTOR(1536)`, but NFR-13 wants providers swappable by config. | Migration 0001 reads `EMBEDDING_DIM` from settings (1536 for OpenAI, 384 for bge). Changing it later requires an explicit "re-embed" command that rebuilds the column and index. The API refuses to start if `EMBEDDING_DIM` doesn't match the DB column. | **C** (D5) |
+| B2 | **Embedding dimension is fixed** at `VECTOR(1536)`, but NFR-13 wants providers swappable by config. | Migration 0001 reads `EMBEDDING_DIM` from settings (1536 for `gemini-embedding-2`, 384 for local bge). Gemini's default of 3072 d is over pgvector's 2000-d HNSW limit, so we request 1536. Changing it later requires an explicit "re-embed" command that rebuilds the column and index. The API refuses to start if `EMBEDDING_DIM` doesn't match the DB column. | **C** (D5) |
 | B3 | **Refresh tokens (FR-3)** have no table, so they can't be revoked. | New `refresh_tokens` table (id, user_id, token_hash, expires_at, revoked_at, created_at, replaced_by), with rotation on every refresh. | **C** (D5) |
 | B4 | **Admin "manage models" (§2 roles)** has no table or endpoints. NFR-11 needs prices to compute cost. | New `llm_models` table (id, provider, model_id, display_name, supports_temperature, input_usd_per_mtok, output_usd_per_mtok, is_active). Bot and template `model` values must reference an active row. This also gives a path to bulk-migrate bots when a model is retired, which already happened once (A2). | **C** (D5) |
 | B5 | **Cost per bot (NFR-11):** `chat_messages` has tokens, but ingestion, extraction and eval calls are logged nowhere. | New `llm_usage` table (bot_id, kind `chat/embed/extract/eval_answer/eval_judge`, model, input_tokens, output_tokens, cost_usd, created_at). | **C** (D5) |
@@ -77,7 +77,7 @@ Legend: **C** = needs your confirmation · **P** = proposed default that I'll ap
 | C15 | **Scanned PDFs** have no text layer, and OCR isn't in scope. | Detect "almost no extractable text" and set status `failed` with the message "This PDF looks scanned; upload a text-based PDF or DOCX." | **P** |
 | C16 | **iframe embedding (FR-31)** vs clickjacking. | `/b/[slug]` sends `Content-Security-Policy: frame-ancestors *`. Every other page sends `frame-ancestors 'none'`. A per-bot origin allow-list goes to Later. | **P** |
 | C17 | **Auth token transport** when the frontend (Vercel) and API (separate host) are on different domains. | Keep the access token (15 min) in memory. Put the refresh token (14 days) in an `HttpOnly; Secure; SameSite=Lax` cookie scoped to `/auth`. For the cookie to work, the app and API must share a registrable domain (`app.example.dev` and `api.example.dev`), so a custom domain is needed (D8). Public chat uses no cookies. | **C** |
-| C18 | **Evaluation judge model.** | Use a separate `JUDGE_MODEL`, one tier up from the answering model and from the other provider (to reduce self-preference). The judge also gets the retrieved chunks, so it can tell whether a "fail" came from retrieval or from generation. | **P** |
+| C18 | **Evaluation judge model.** | Use a separate `JUDGE_MODEL` one tier up from the answering model: `gemini-3.6-flash` judging `gemini-3.5-flash-lite`. It's the same provider, so some self-preference bias is possible; this is noted in eval reports, and judging with `qwen3:8b` is a cross-check. The judge also gets the retrieved chunks, so it can tell whether a "fail" came from retrieval or from generation. | **P** |
 | C19 | **Analytics days** (FR-36): UTC or local? | Group by day in `bots.timezone`. | **P** |
 | C20 | **`updated_at`** maintenance. | ORM `onupdate=func.now()`. No DB trigger. | **P** |
 
@@ -102,17 +102,18 @@ Goal: upload → chunk → embed → streamed chat with citations and fallback. 
   Touches: root files from §3 (`.pre-commit-config.yaml`, `.editorconfig`, `Makefile`, `.github/workflows/ci.yml`), `backend/pyproject.toml` + `uv.lock`, `frontend/package.json` + lockfile.
   Done when: `make lint` and `make test` pass on an empty app. CI runs ruff, mypy, eslint, prettier --check and pytest on push. `pre-commit run --all-files` is clean.
   *Done 2026-11-02.* Versions were re-checked with the 14-day rule, which is now enforced automatically by `exclude-newer = "14 days"` (uv) and `min-release-age=14` (npm). Differences from §7: **FastAPI 0.146.0** (0.147+ is under 14 days old), **uv 0.13.1** in CI, **httpx2 2.14.0** for tests (Starlette 1.9's TestClient deprecates httpx, which closes A7), **TypeScript 6.0.3** (confirmed: typescript-eslint 8.71 needs TS < 6.1), and **@types/node 24.19.2**. Accepted for now: `npm audit` reports 16 moderate findings, all one minimatch ReDoS advisory in dev-only lint plugins. Production dependencies have 0 findings.
-- [ ] **M1-02 · Dev stack & settings** · 3 h · needs M1-01
+- [x] **M1-02 · Dev stack & settings** · 3 h · needs M1-01
   Touches: `docker-compose.yml` (postgres, redis, api, frontend, migrate), `backend/app/config.py` (pydantic-settings), `backend/app/main.py`, `.env.example`.
   Done when: `docker compose up` brings everything up healthy. `GET /health` returns DB and Redis status. A missing required env var fails fast with a clear message.
+  *Done 2026-11-02.* `make dev` brings all 4 services up healthy. `/health` returns 200, or 503 naming the dependency that's down; both outages were tested live. Image policy: **base images take the latest patch of their pinned version line** (Redis 8.10.3 was a security release), while **app images and libraries keep the 14-day rule** (so Ollama is 0.40.7). Other differences: Postgres is exposed on host port **5433**, since 5432 is commonly taken by a local install. The `migrate` service moves to M1-03, when Alembic exists. `app/db/session.py` (the engine only) arrived early because `/health` needs it. Libraries added: SQLAlchemy 2.1.5, asyncpg 0.32.0, redis 8.1.0, pydantic-settings 2.16.0.
 - [ ] **M1-03 · DB models & migration 0001** · 5 h · needs M1-02
   Touches: `backend/app/db/session.py`, `backend/app/db/models/*.py`, `backend/app/db/migrations/versions/0001_initial.py`.
   Done when: `alembic upgrade head` on an empty DB creates every extension, enum, table and index in database-schema.md, plus the approved D5 additions. `downgrade base` is clean. A test inserts user → bot → document → chunk and queries it back.
 - [ ] **M1-04 · LLM provider interface + adapters** · 5 h · needs M1-02
-  Touches: `backend/app/providers/llm/{base,openai,anthropic,ollama,fake}.py`, `backend/app/providers/registry.py`.
-  Done when: `LLMProvider` exposes `stream_chat()` (yields text deltas plus a final usage record) and `complete_json(schema)`. Model strings are `provider:model_id`. Unit tests run against `FakeLLM`. One opt-in smoke test per real provider (`pytest -m live`) streams a reply.
+  Touches: `backend/app/providers/llm/{base,gemini,ollama,fake}.py`, `backend/app/providers/registry.py`.
+  Done when: `LLMProvider` exposes `stream_chat()` (yields text deltas plus a final usage record) and `complete_json(schema)`. Model strings are `provider:model_id`. Unit tests run against `FakeLLM`. A Gemini 429 or quota-exhausted response maps to a typed `ProviderQuotaError`; chat turns it into a friendly "busy, try later" message, not a 500. Optional `FALLBACK_CHAT_MODEL` (Ollama) is tried on quota errors. One opt-in smoke test per real provider (`pytest -m live`) streams a reply.
 - [ ] **M1-05 · Embedding provider interface + adapters** · 3 h · needs M1-02
-  Touches: `backend/app/providers/embeddings/{base,openai,local,fake}.py`.
+  Touches: `backend/app/providers/embeddings/{base,gemini,local,fake}.py`.
   Done when: `embed_documents(list[str])` (batched) and `embed_query(str)` return vectors of `EMBEDDING_DIM`. A dimension mismatch raises at startup. FakeEmbeddings is deterministic, so tests are repeatable.
 - [ ] **M1-06 · Text extraction (PDF/DOCX/TXT/MD)** · 5 h · needs M1-01
   Touches: `backend/app/services/ingestion/extract.py`, `tests/unit/ingestion/test_extract.py`, `tests/fixtures/docs/*`.
@@ -143,7 +144,7 @@ Goal: upload → chunk → embed → streamed chat with citations and fallback. 
   Done when: `python -m app.cli eval-file <syllabus> <questions.yaml>` ingests into a temporary bot, answers all questions through `answer.py`, scores them with the LLM judge (plus exact checks for fallback and refusal), and prints a table and a JSON report.
 - [ ] **M1-15 · M1 acceptance & model comparison** · 4 h · needs M1-13, M1-14, D2, D7
   Touches: `docs/decisions/0001-default-model.md` (new ADR), `bots.settings` defaults.
-  Done when: you've run the fixture and real syllabi on both candidate models. **15 or more of 20 pass on the real syllabus.** The ADR records accuracy, p95 first-token latency and cost per 100 questions, and sets the default model and `min_score`.
+  Done when: you've run the fixture and real syllabi on `gemini-3.5-flash-lite` and on the backup `qwen3:8b`. **15 or more of 20 pass on the real syllabus** with the default. The ADR records accuracy, p95 first-token latency, free-tier requests used per eval run (and the paid-equivalent cost), and sets the default model and `min_score`.
 
 ### M2 — Multi-tenant
 Goal: users, roles, many bots, `bot_id` isolation, Celery. **Done when the isolation tests pass and two instructors' bots never mix data.**
@@ -202,7 +203,7 @@ Goal: templates, publish/draft, share links, embed. **Done when an instructor cr
   Done when: `GET /public/bots/{slug}` returns the name, welcome message and suggestions only when published. Acceptance tests: a **draft slug returns 404**, and **after rotation the old slug returns 404** (§6 of requirements).
 - [ ] **M3-06 · Public chat page polish** · 6 h · needs M3-05, M1-12
   Touches: `frontend/app/b/[slug]/*`, `frontend/components/chat/*`.
-  Done when: the page shows the course header, welcome message and suggested-question chips. It works at 360 px width. Keyboard: Enter sends, Shift+Enter adds a newline, and focus is managed. The message list uses `aria-live="polite"`. Contrast passes AA. axe reports no serious or critical issues.
+  Done when: the page shows the course header, welcome message, suggested-question chips and a short notice: "Don't share personal information" (free-tier data use, R6). It works at 360 px width. Keyboard: Enter sends, Shift+Enter adds a newline, and focus is managed. The message list uses `aria-live="polite"`. Contrast passes AA. axe reports no serious or critical issues.
 - [ ] **M3-07 · Embedding** · 3 h · needs M3-06
   Touches: `frontend/next.config.ts` (headers), `frontend/app/bots/[id]/share/page.tsx`.
   Done when: CSP is set as in C16. The share page shows the link, a QR code (if done without a new dependency; otherwise skipped) and an `<iframe>` snippet. A static test page embeds the bot and chat works in it.
@@ -321,8 +322,8 @@ syllabot/
 │   │   │   ├── retrieval.py  prompt_builder.py  answer.py  date_intent.py
 │   │   │   ├── evaluator.py  analytics.py  usage.py  budget.py  storage.py  bots.py  chat_log.py
 │   │   ├── providers/
-│   │   │   ├── llm/          base.py, openai.py, anthropic.py, ollama.py, fake.py
-│   │   │   ├── embeddings/   base.py, openai.py, local.py, fake.py
+│   │   │   ├── llm/          base.py, gemini.py, ollama.py, fake.py
+│   │   │   ├── embeddings/   base.py, gemini.py, local.py, fake.py
 │   │   │   └── registry.py
 │   │   ├── workers/          celery_app.py, tasks.py, beat.py, async_runner.py
 │   │   └── seed/             syllabus_assistant.py, demo.py
@@ -394,16 +395,16 @@ MAX_UPLOAD_MB=20
 MAX_SOURCES_PER_BOT=20
 
 # --- LLM providers (model strings are provider:model_id) ---
-OPENAI_API_KEY=
-ANTHROPIC_API_KEY=
-OLLAMA_BASE_URL=http://ollama:11434
-DEFAULT_CHAT_MODEL=anthropic:claude-haiku-5-5   # final value set by M1-15 ADR
+GEMINI_API_KEY=                                 # free key from Google AI Studio
+OLLAMA_BASE_URL=http://localhost:11434
+DEFAULT_CHAT_MODEL=gemini:gemini-3.5-flash-lite
+FALLBACK_CHAT_MODEL=ollama:qwen3:8b             # used on Gemini quota errors; empty = off
 EXTRACTION_MODEL=                               # empty = DEFAULT_CHAT_MODEL
-JUDGE_MODEL=openai:gpt-6.1-terra                # different provider, one tier up
+JUDGE_MODEL=gemini:gemini-3.6-flash             # one tier up
 
 # --- Embeddings (dimension must match the DB column) ---
-EMBEDDING_PROVIDER=openai        # openai | local
-EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_PROVIDER=gemini        # gemini | local
+EMBEDDING_MODEL=gemini-embedding-2
 EMBEDDING_DIM=1536               # 384 for BAAI/bge-small-en-v1.5
 
 # --- Limits / retention / cost ---
@@ -518,6 +519,7 @@ Scoring: `pass` = 1, `partial` = 0, `fail` = 0 for the M1 gate (**≥ 15 to pass
 | R3 | **Retrieval misses.** Short chunks, vocabulary mismatch ("make-up exam" vs "missed exams"), and a badly calibrated threshold that causes too many or too few fallbacks. | False fallbacks or hallucinated answers | Section-prefixed embeddings, threshold calibrated in M1-15 from score distributions, retrieved chunks and scores shown in the preview panel, eval cases for paraphrase and traps (Q14, Q18), fallback analytics showing gaps. If evals still miss, turn on hybrid search: the `tsv` column already exists, merged with reciprocal rank fusion. |
 | R4 | **Cost, abuse and model churn on a public demo.** Bots hammering the endpoint, open sign-up, and providers retiring models (this already happened to the docs' default). | Unexpected bills, or a demo that breaks the day of an interview | Per-bot and per-IP rate limits, a daily spend cap that switches to the fallback (C7), closed sign-up on the demo, `llm_models` with a bulk-migrate action (B4), `llm_usage` cost tracking, a nightly live smoke test that alerts on model errors, and pinned model IDs. |
 | R5 | **Prompt injection** from uploaded documents ("ignore previous instructions…") or student messages, plus cross-tenant leakage. | Off-policy answers, leaked system prompt, embarrassment | Document text goes inside delimiters labelled as data (NFR-4). The model has no tools and its output never triggers actions. Only `bot_id`-filtered context is ever retrieved. The system prompt contains no secrets. Adversarial eval cases are added to the suite (an injected "ignore instructions" line in a fixture document). Output is length-capped, and markdown is rendered as sanitised text in the UI. |
+| R6 | **Free-tier LLM terms** (D2). Google may use prompts and responses to improve its products, and humans may review them. Users must be 18+. EEA/UK/CH end users need the paid tier. Quotas are per project and Google has cut them before. | Unsuitable for real student data. The demo could hit a daily cap mid-interview | Demo uses synthetic or public syllabi only. Chat page shows a "Don't share personal information" notice. Ollama fallback on quota errors. Warm-up and an eval run counted against quota before demos. Moving to real students means switching to the paid tier (no training on data) or to Ollama: a config change, recorded in an ADR. |
 
 Also tracked: **supply-chain risk** (exact pins, hash lockfiles, 14-day release cool-off, no LiteLLM) · **latency (NFR-7)**, because both candidate models think by default (`reasoning_effort` none/low, measured in M1-15) · **Celery and async code** (one event loop per worker process; a test confirms the worker uses the same `answer.py` path) · **Neon scale-to-zero cold starts** for the first demo request (warm it before demos, or use a paid always-on compute for interview week).
 
@@ -580,8 +582,8 @@ Versions were checked on **2026-10-26** against PyPI, npm and official docs. **S
 | DOCX extraction | **python-docx 1.2.0** | docx2python, mammoth, Docling | Reads `Heading n` styles directly. Stable | Last release Jun 2025 (slow cadence, but the format is stable) | 🆕 |
 | Web page extraction | **trafilatura 2.3.1** | readability-lxml, BeautifulSoup + custom rules | Strong main-content extraction, keeps headings, maintained (Oct 2026) | Can drop content on unusual layouts | 🆕 |
 | Token counting | **tiktoken 0.14** (approximate, for chunk sizing only) | Provider count-token APIs | Fast, local, provider-neutral sizing. Billing uses each provider's reported usage, not tiktoken | Counts differ a little across providers, which is fine for ±500-token chunks | 🆕 |
-| Provider abstraction | **Our own adapters** over **openai 3.39**, **anthropic 2.3**, **ollama 0.6.3** SDKs | LiteLLM (**two PyPI supply-chain compromises in 2026**), pydantic-ai, LangChain | Specified (NFR-13). Small surface (stream + JSON). No heavy framework. We control timeouts and usage capture | We maintain three small adapters. Anthropic 2.0 (2026-10-21) and OpenAI 3.x change often, so pin and wait 14 days | ✅ |
-| HTTP client (own calls) | **httpx2 2.16** | httpx 0.28 (no release since Dec 2024; the Anthropic SDK left it as unmaintained), aiohttp | Same API as httpx and maintained (Pydantic team). Already pulled in by the SDKs | Some test-mocking libraries need the httpx2 variant | 🆕 |
+| Provider abstraction | **Our own adapters** over **google-genai 2.31** and **ollama 0.6.3** SDKs (OpenAI and Anthropic adapters moved to Later) | LiteLLM (**two PyPI supply-chain compromises in 2026**), pydantic-ai, LangChain | Specified (NFR-13). Small surface (stream + JSON + embed). No heavy framework. We control timeouts, quota/429 handling and usage capture. Two real providers still prove swappability | We maintain two small adapters. Pin the SDKs and wait 14 days, since google-genai releases often | ✅ |
+| HTTP client (own calls) | **httpx2 2.14** | httpx 0.28 (no release since Dec 2024; Starlette 1.9's TestClient deprecates it), aiohttp | Same API as httpx and maintained (Pydantic team) | google-genai still depends on plain httpx internally. That's fine, since we don't pass it a client | 🆕 |
 | Logging | **structlog 26.1** | stdlib `logging` + python-json-logger, loguru | JSON logs with context variables for `request_id` and `bot_id` (NFR-11) | One more dependency | 🆕 |
 | Errors | **Sentry**: `sentry-sdk 2.73` [fastapi, celery], `@sentry/nextjs 11.9` | Self-hosted GlitchTip, logs only | Specified (architecture §10). Celery and FastAPI integrations | Check free-tier limits at M5-06 | ✅ |
 | File storage | **Local volume (dev) / S3 via boto3 1.43** | aioboto3, obstore, Cloudflare R2 | Specified. boto3 in a threadpool is simplest | Sync client in a threadpool | ✅ |
@@ -599,10 +601,10 @@ Versions were checked on **2026-10-26** against PyPI, npm and official docs. **S
 
 | Area | Choice | Alternatives considered | Why | Trade-offs | Status |
 |---|---|---|---|---|---|
-| Chat model (default) | **M1 bake-off: `claude-haiku-5-5` vs `gpt-6-luna`**. Both cost $0.10 in / $0.50 out per 1M tokens and support streaming and structured output | `gpt-4o-mini` (docs; **retires 2027-01-14**), `gpt-5-mini`/`nano` (retire 2026-12-11), larger models (Sonnet 5.5 $2/$10, GPT-6.1 Terra $1/$5) | "Small, fast, cheap" as the docs intend. The bake-off answers requirements §7 Q3 with data. About $0.0005 per answer (about 3.5k in / 250 out tokens) | Both think by default, so set `reasoning_effort` to none/low for NFR-7. Neither takes `temperature` (D3) | ⚠ **D2** |
-| Local chat model | **`qwen3:8b` via Ollama** (optional profile) | `llama3.1:8b` (docs), `gemma3:12b`/`4b` | Better at following "answer only from context" in 2026 guides. About 8 GB at Q4 | Needs a GPU or is slow on CPU. Demo-only | ⚠ A4 |
-| Judge model | **One tier up, from the other provider** (e.g. `gpt-6.1-terra` judging Haiku, or `claude-sonnet-5-5` judging Luna) | The answering model as its own judge | Less self-preference bias. Only 20 cases per run, so the cost is negligible | Needs both API keys for the best setup. Works with one | 🆕 (C18) |
-| Embeddings (default) | **OpenAI `text-embedding-3-small`** (1536 d; about $0.02/1M tokens per OpenRouter listing, verify) | `text-embedding-3-large`, Voyage (not evaluated in depth), Ollama `nomic-embed-text` | Specified. Not on OpenAI's deprecation list. A 30-page syllabus costs about $0.0003 | Needs an OpenAI key even if the chat model is Claude (Anthropic has no embeddings API) | ✅ |
+| Chat model (default) | **`gemini-3.5-flash-lite`** (Stable, free tier) | `gemini-3.1-flash-lite` (older stable), `gemini-3.6-flash` (stronger, lower free quota), paid `claude-haiku-5-5` / `gpt-6-luna` ($0.10/$0.50 per 1M tokens) | You prefer no paid API. It's in the same small, fast class as the paid candidates. Paid price if ever needed: about $0.10/$0.40 per 1M tokens | **Free tier:** Google uses prompts and responses to improve its products and humans may review them; users must be 18+; it isn't allowed for apps serving EEA/UK/CH users; there are daily per-project quotas. Fine for the demo, not for real students (R6) | ✅ **D2** |
+| Backup chat model | **`qwen3:8b` via Ollama** (optional profile, or native Ollama on the Mac for speed) | `llama3.1:8b` (docs), `gemma3:12b`/`4b` | Free, private and unmetered, so it's the fallback when the Gemini quota runs out or data must stay local. About 8 GB at Q4 | Slow without a GPU. Docker on this Mac has about 4 GB RAM, so run Ollama natively | ✅ A4 |
+| Judge model | **`gemini-3.6-flash`** (one tier up, free tier) | The answering model as its own judge, `qwen3:8b` | Stronger than the model it grades. Only about 20 calls per run | Same provider as the answering model (C18) | ✅ (C18) |
+| Embeddings (default) | **`gemini-embedding-2` at 1536 d** (free tier; normalises truncated output automatically; 8,192-token input) | `gemini-embedding-001` (text-only, 2,048 tokens, needs manual normalisation when truncated), OpenAI `text-embedding-3-small` (paid), Ollama `nomic-embed-text` | Free, with no second provider key needed. 1536 d fits pgvector HNSW (≤ 2000 d). Uses a task prefix in the text (`task: search result \| query:` / `title: … \| text:`) instead of `task_type` | Free-tier data use as for chat (R6). Switching provider or dimension means re-embedding (B2) | ✅ |
 | Embeddings (local) | **`BAAI/bge-small-en-v1.5` via fastembed 0.9.1** (384 d, ONNX) | sentence-transformers (PyTorch, about 1 GB image), Ollama embeddings | Specified model family. No PyTorch, so the image stays small | Lower quality than OpenAI's. Switching dimension means re-embedding (B2) | ✅ (A5) |
 
 ### Tooling
@@ -643,4 +645,5 @@ Versions were checked on **2026-10-26** against PyPI, npm and official docs. **S
 - LMS (LTI) integration, university SSO (non-goals for v1)
 - OpenTelemetry tracing. TanStack Query if the dashboard grows
 - Tool upgrades: TypeScript 7 (when typescript-eslint supports it), PostgreSQL 18, Node 26, prek, ty/pyright, PyMuPDF if you choose an AGPL licence
+- OpenAI and Anthropic adapters (deferred by D2; the interface already supports them)
 - Answer caching for very frequent questions. Prompt caching once system prompts grow
