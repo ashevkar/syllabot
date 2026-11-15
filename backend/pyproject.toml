@@ -18,12 +18,12 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "httpx2==2.14.0",  # Starlette's TestClient; plain httpx is deprecated there (PLAN.md A7)
-    "mypy==2.4.0",
-    "pytest==9.1.1",
-    "pytest-asyncio==1.4.0",
+    "httpx2==2.16.0",  # Starlette's TestClient; plain httpx is deprecated there (PLAN.md A7)
+    "mypy==2.4.1",
+    "pytest==9.2.0",
+    "pytest-asyncio==1.4.1.post1",
     "pytest-cov==7.1.0",
-    "ruff==0.17.1",
+    "ruff==0.17.3",
     "testcontainers[postgres]==4.15.0",
 ]
 
