@@ -8,6 +8,7 @@ from redis.asyncio import Redis
 
 from app.config import get_settings
 from app.db.session import create_engine
+from app.providers.registry import ProviderRegistry
 from app.routers import health
 
 
@@ -16,9 +17,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     settings = get_settings()
     app.state.db_engine = create_engine(settings)
     app.state.redis = Redis.from_url(str(settings.redis_url))
+    app.state.providers = ProviderRegistry(settings)
     try:
         yield
     finally:
+        await app.state.providers.aclose()
         await app.state.redis.aclose()
         await app.state.db_engine.dispose()
 

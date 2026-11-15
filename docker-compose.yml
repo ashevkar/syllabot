@@ -1,6 +1,6 @@
 # Local dev stack (NFR-12): `make dev`, or `docker compose up --build`.
 # Image tags: latest patch of the pinned line (security fixes); app images follow
-# the 14-day cool-off. `migrate` arrives in M1-03, `worker` in M2-05, `beat` in M4-11.
+# the 14-day cool-off. `worker` arrives in M2-05, `beat` in M4-11.
 name: syllabot
 
 x-backend-env: &backend-env
@@ -38,6 +38,20 @@ services:
       timeout: 3s
       retries: 10
 
+  migrate: # one-shot: `alembic upgrade head`, then exits; api waits for it
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    env_file:
+      - path: .env
+        required: false
+    environment: *backend-env
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   api:
     build: ./backend
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
@@ -51,8 +65,8 @@ services:
       - ./backend:/app
       - uploads:/data/uploads
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     healthcheck:

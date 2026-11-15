@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help env dev down logs install hooks lint lint-backend lint-frontend format test test-backend test-frontend build-frontend precommit
+.PHONY: help env dev down logs migrate install hooks lint lint-backend lint-frontend format test test-backend test-frontend test-live build-frontend precommit
 
 BACKEND  := uv run --directory backend
 FRONTEND := npm --prefix frontend run -s
@@ -20,6 +20,9 @@ down: ## Stop the stack (keeps data volumes)
 
 logs: ## Follow logs from all services
 	docker compose logs -f
+
+migrate: ## Apply database migrations (against DATABASE_URL in .env)
+	$(BACKEND) alembic upgrade head
 
 install: ## Install backend + frontend deps from lockfiles, then git hooks
 	cd backend && uv sync --frozen
@@ -54,6 +57,9 @@ test-backend:
 
 test-frontend:
 	$(FRONTEND) test
+
+test-live: ## Smoke-test real LLM providers (uses free-tier quota; needs keys in .env)
+	$(BACKEND) pytest -m live -v
 
 build-frontend: ## Production build of the Next.js app
 	$(FRONTEND) build
